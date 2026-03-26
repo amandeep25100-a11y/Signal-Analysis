@@ -134,4 +134,39 @@ export const analyzeImage = async (formData) => {
   }
 }
 
+export const cleanAudio = async (formData) => {
+  try {
+    debugLog.info('🧼 Starting audio cleaning...')
+    const perf = measurePerformance('Audio Cleaning')
+
+    debugPanel.addLog('info', '⏳ Sending audio for cleaning...', {
+      files: Array.from(formData.entries())
+        .filter(([key]) => key === 'audio')
+        .map(([, file]) => `${file.name} (${(file.size / 1024).toFixed(2)}KB)`)
+    })
+
+    const response = await api.post('/clean-audio', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+
+    const duration = perf.end()
+    debugPanel.addLog('success', `✨ Audio Cleaning Successful (${duration.toFixed(0)}ms)`, {
+      duration: response.data.duration,
+      sample_rate: response.data.sample_rate,
+    })
+
+    return response.data
+  } catch (error) {
+    const errorMsg = error.response?.data?.detail || error.message
+    debugLog.error('💥 Audio cleaning failed', errorMsg)
+    debugPanel.addLog('error', '💥 Audio Cleaning Failed', {
+      status: error.response?.status,
+      error: errorMsg
+    })
+    throw new Error(errorMsg || 'Failed to clean audio')
+  }
+}
+
 export default api

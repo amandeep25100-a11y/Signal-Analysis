@@ -1,7 +1,10 @@
 import React from 'react'
 import { motion } from 'framer-motion'
 
-export default function LoadingIndicator() {
+export default function LoadingIndicator({
+  title = 'Analyzing Audio Signal...',
+  subtitle = 'Processing signal in time and frequency domains',
+}) {
   const containerVariants = {
     animate: {
       transition: {
@@ -40,10 +43,10 @@ export default function LoadingIndicator() {
         ))}
       </motion.div>
       <p className="text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-blue-400 font-bold text-lg animate-pulse" style={{fontFamily: 'Aptos, system-ui, sans-serif'}}>
-        Analyzing Audio Signal...
+        {title}
       </p>
       <p className="text-secondary/50 text-sm mt-2">
-        Processing signal in time and frequency domains
+        {subtitle}
       </p>
     </motion.div>
   )

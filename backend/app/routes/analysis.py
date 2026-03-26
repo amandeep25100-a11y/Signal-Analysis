@@ -3,6 +3,7 @@ import tempfile
 import os
 import logging
 from app.services.audio_processor import AudioProcessor
+from app.services.audio_enhancer import AudioEnhancer
 from app.services.classifiers import EmotionClassifier, GenreClassifier
 from app.services.image_processor import ImageProcessor
 
@@ -14,6 +15,7 @@ router = APIRouter(prefix="/api", tags=["analysis"])
 
 # Initialize processors and classifiers
 audio_processor = AudioProcessor()
+audio_enhancer = AudioEnhancer()
 emotion_classifier = EmotionClassifier()
 genre_classifier = GenreClassifier()
 image_processor = ImageProcessor()
@@ -211,3 +213,54 @@ async def analyze_image(image: UploadFile = File(...), filter_strength: float = 
     except Exception as e:
         logger.error(f"❌ Image analysis failed: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Image analysis error: {str(e)}")
+
+
+@router.post("/clean-audio")
+async def clean_audio(audio: UploadFile = File(...), strength: float = Form(0.8)):
+    """Remove background noise and enhance uploaded audio."""
+    logger.info(f"🧼 Received clean-audio request - file: {audio.filename}, type: {audio.content_type}, strength: {strength}")
+
+    if not audio.filename:
+        raise HTTPException(status_code=400, detail="No audio file provided")
+
+    try:
+        original_ext = os.path.splitext(audio.filename)[1].lower() if audio.filename else ""
+        if not original_ext:
+            content_type_suffix = {
+                "audio/wav": ".wav",
+                "audio/x-wav": ".wav",
+                "audio/mpeg": ".mp3",
+                "audio/mp3": ".mp3",
+                "audio/webm": ".webm",
+                "audio/ogg": ".ogg",
+                "audio/mp4": ".m4a",
+                "audio/x-m4a": ".m4a",
+            }
+            original_ext = content_type_suffix.get(audio.content_type or "", ".bin")
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=original_ext) as tmp_file:
+            content = await audio.read()
+            if not content:
+                raise HTTPException(status_code=400, detail="Empty audio upload")
+
+            tmp_file.write(content)
+            tmp_path = tmp_file.name
+
+        try:
+            result = audio_enhancer.clean_audio(tmp_path, strength=strength)
+            logger.info("✅ Audio cleaning complete")
+            return result
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+    except HTTPException:
+        raise
+    except ValueError as e:
+        logger.error(f"❌ Audio cleaning validation error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=400, detail=f"Invalid audio format: {str(e)}")
+    except Exception as e:
+        logger.error(f"❌ Audio cleaning failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Audio cleaning error: {str(e)}")

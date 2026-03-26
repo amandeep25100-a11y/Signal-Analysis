@@ -7,7 +7,8 @@ import GraphDisplay from './components/GraphDisplay'
 import ResultsSection from './components/ResultsSection'
 import LoadingIndicator from './components/LoadingIndicator'
 import ImageAnalyzer from './components/ImageAnalyzer'
-import { analyzeAudio } from './utils/api'
+import AudioEnhancementSection from './components/AudioEnhancementSection'
+import { analyzeAudio, cleanAudio } from './utils/api'
 import { debugLog, createDebugDisplay, debugPanel, logStateChange } from './utils/debug'
 
 function App() {
@@ -17,7 +18,11 @@ function App() {
   const [audioType, setAudioType] = useState('miscellaneous')
   const [isRecording, setIsRecording] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isCleaning, setIsCleaning] = useState(false)
   const [results, setResults] = useState(null)
+  const [cleanedData, setCleanedData] = useState(null)
+  const [noiseStrength, setNoiseStrength] = useState(0.8)
+  const [enhancementViewMode, setEnhancementViewMode] = useState('original')
   const [error, setError] = useState(null)
   const mediaRecorderRef = useRef(null)
   const audioContextRef = useRef(null)
@@ -111,6 +116,10 @@ function App() {
   }, [isLoading])
 
   useEffect(() => {
+    logStateChange('isCleaning', null, isCleaning)
+  }, [isCleaning])
+
+  useEffect(() => {
     logStateChange('error', null, error)
   }, [error])
 
@@ -119,8 +128,10 @@ function App() {
     if (mode === 'image') {
       setAudioFile(null)
       setResults(null)
+      setCleanedData(null)
       setError(null)
       setIsLoading(false)
+      setIsCleaning(false)
       setIsRecording(false)
       recordedChunksRef.current = []
     }
@@ -131,6 +142,7 @@ function App() {
     
     if (isSupportedAudioFile(file)) {
       setAudioFile(file)
+      setCleanedData(null)
       setError(null)
       debugLog.success('✅ File validated')
       debugPanel.addLog('success', '✅ Audio file valid', { name: file.name })
@@ -192,6 +204,7 @@ function App() {
         }
 
         setAudioFile(file)
+        setCleanedData(null)
         stream.getTracks().forEach(track => track.stop())
         
         debugLog.success('✅ Recording saved', {
@@ -267,6 +280,39 @@ function App() {
       debugPanel.addLog('error', '💥 Analysis Failed', { error: errorMsg })
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleCleanAudio = async () => {
+    if (!audioFile) {
+      const errorMsg = 'Please upload or record audio first'
+      setError(errorMsg)
+      debugPanel.addLog('error', '❌ No Audio For Cleaning', { error: errorMsg })
+      return
+    }
+
+    setIsCleaning(true)
+    setError(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('audio', audioFile)
+      formData.append('strength', String(noiseStrength))
+
+      const data = await cleanAudio(formData)
+      setCleanedData(data)
+      setEnhancementViewMode('cleaned')
+      debugPanel.addLog('success', '✅ Audio Cleaned', {
+        duration: data.duration,
+        sample_rate: data.sample_rate,
+        strength: data.strength,
+      })
+    } catch (err) {
+      const errorMsg = err.message || 'Failed to clean audio'
+      setError(errorMsg)
+      debugPanel.addLog('error', '💥 Clean Audio Failed', { error: errorMsg })
+    } finally {
+      setIsCleaning(false)
     }
   }
 
@@ -352,6 +398,17 @@ function App() {
               {results && <GraphDisplay results={results} />}
 
               {results && <ResultsSection results={results} audioType={audioType} />}
+
+              <AudioEnhancementSection
+                audioFile={audioFile}
+                strength={noiseStrength}
+                setStrength={setNoiseStrength}
+                onCleanAudio={handleCleanAudio}
+                isCleaning={isCleaning}
+                cleanedData={cleanedData}
+                viewMode={enhancementViewMode}
+                setViewMode={setEnhancementViewMode}
+              />
             </>
           ) : (
             <ImageAnalyzer key="image-mode" />
